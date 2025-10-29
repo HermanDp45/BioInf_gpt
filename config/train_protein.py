@@ -4,7 +4,7 @@ eval_interval = 10
 log_interval = 1
 max_iters = 50
 
-dataset = 'shakespeare_char'
+dataset = 'protein'
 batch_size = 8
 block_size = 64
 

@@ -4,7 +4,7 @@ import numpy as np
 from datasets import load_dataset
 from collections import Counter
 
-os.makedirs('input', exist_ok=True)
+# os.makedirs('input', exist_ok=True)
 
 print("Loading dataset...")
 
@@ -55,8 +55,8 @@ print(f"val sequences: {len(val_data)}")
 # 4. Export to bin files
 train_data = np.array(train_data, dtype=np.uint16)
 val_data = np.array(val_data, dtype=np.uint16)
-train_data.tofile('input/train.bin')
-val_data.tofile('input/val.bin')
+train_data.tofile(os.path.dirname(__file__), 'train.bin')
+val_data.tofile(os.path.dirname(__file__), 'val.bin')
 
 # 5. Save metadata
 meta = {
@@ -67,5 +67,5 @@ meta = {
     'avg_length': sum([len(seq) for seq in encoded_sequences])/len(encoded_sequences)
 }
 
-with open('input/meta.pkl', 'wb') as f:
+with open(os.path.join(os.path.dirname(__file__), 'meta.pkl'), 'wb') as f:
     pickle.dump(meta, f)
