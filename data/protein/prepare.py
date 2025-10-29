@@ -50,12 +50,9 @@ def flatten(seqs):
     for s in seqs: flat.extend(s)
     return np.array(flat, dtype=np.uint16)
 
-train_ids = flatten(train_data)
-val_ids = flatten(val_data)
-
 # 4. Export to bin files
-train_data = np.array(train_data, dtype=np.uint16)
-val_data = np.array(val_data, dtype=np.uint16)
+train_data = np.array(flatten(train_data), dtype=np.uint16)
+val_data = np.array(flatten(val_data), dtype=np.uint16)
 train_data.tofile(os.path.join(os.path.dirname(__file__), 'train.bin'))
 val_data.tofile(os.path.join(os.path.dirname(__file__), 'val.bin'))
 
