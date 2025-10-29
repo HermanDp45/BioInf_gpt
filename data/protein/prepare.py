@@ -47,7 +47,9 @@ print(f"val sequences: {len(val_data)}")
 
 def flatten(seqs):
     flat = []
-    for s in seqs: flat.extend(s)
+    for s in seqs: 
+        flat.extend(s)
+        flat.append(stoi['<eos>'])
     return np.array(flat, dtype=np.uint16)
 
 # 4. Export to bin files

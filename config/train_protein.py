@@ -1,18 +1,24 @@
-# tiny model for CPU debugging
-out_dir = 'out-tiny'
-eval_interval = 10
-log_interval = 1
-max_iters = 50
+out_dir = 'out-protein'
+eval_interval = 50
+log_interval = 10
+max_iters = 1000
 
+# dir name
 dataset = 'protein'
-batch_size = 8
-block_size = 64
 
-n_layer = 4
-n_head = 4 
-n_embd = 128
-dropout = 0.1
+batch_size = 32
+block_size = 256
 
-learning_rate = 1e-3
+n_layer = 6
+n_head = 6 
+n_embd = 256
+dropout = 0.2
+
+learning_rate = 6e-4
 device = 'cpu'
 compile = False
+
+prob_class = 0.5
+type_prob = 0.3
+data_type = 'sequence'
+prefix_mode = 'after_eos'
