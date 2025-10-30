@@ -76,7 +76,7 @@ compile = True # use PyTorch 2.0 to compile the model to be faster
 # protein
 class_prob = 0.5
 type_prob = 0.3
-data_type = 'sequence'  # 'sequence' or 'init_seq'
+data_type = None  # 'sequence' or 'init_seq'
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
