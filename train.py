@@ -122,12 +122,13 @@ ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=
 class ProteinDataset(Dataset):
     def __init__(self, sequences, config, meta):
         self.sequences = sequences
-        self.class_prob = config.class_prob
-        self.type_prob = config.type_prob
-        self.data_type = config.data_type
-        self.block_size = config.block_size
+        self.class_prob = config['class_prob']
+        self.type_prob = config['type_prob']
+        self.data_type = config['data_type']
+        self.block_size = config['block_size']
         self.stoi = meta['stoi']
         self.pad_id = self.stoi['<pad>']
+    
     
     def __len__(self):
         return len(self.sequences)
