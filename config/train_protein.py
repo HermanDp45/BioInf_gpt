@@ -10,7 +10,7 @@ batch_size = 32
 block_size = 256
 
 n_layer = 6
-n_head = 6 
+n_head = 8
 n_embd = 256
 dropout = 0.2
 
