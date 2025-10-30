@@ -26,6 +26,7 @@ import numpy as np
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
+from torch.utils.data import Dataset, DataLoader
 
 from model import GPTConfig, GPT
 
@@ -44,7 +45,7 @@ wandb_log = False # disabled by default
 wandb_project = 'owt'
 wandb_run_name = 'gpt2' # 'run' + str(time.time())
 # data
-dataset = 'openwebtext'
+dataset = 'protein'
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size = 1024
@@ -72,6 +73,10 @@ backend = 'nccl' # 'nccl', 'gloo', etc.
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
 compile = True # use PyTorch 2.0 to compile the model to be faster
+# protein
+class_prob = 0.5
+type_prob = 0.3
+data_type = 'sequence'  # 'sequence' or 'init_seq'
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
@@ -129,6 +134,48 @@ def get_batch(split):
     else:
         x, y = x.to(device), y.to(device)
     return x, y
+
+class ProteinDataset(Dataset):
+    def __init__(self, sequences, config, meta):
+        self.sequences = sequences
+        self.class_prob = config.class_prob
+        self.type_prob = config.type_prob
+        self.data_type = config.data_type
+        self.block_size = config.block_size
+        self.stoi = meta['stoi']
+        self.pad_id = self.stoi['<pad>']
+    
+    def __len__(self):
+        return len(self.sequences)
+    
+    def __getitem__(self, idx):
+        item = self.sequences[idx]
+        seq_str = item[self.data_type] if self.data_type in item else item['sequence']
+
+        prefix = []
+        if item['class'] and torch.rand(1).item() < self.class_prob:
+            cls_token = f"<cls_{item['class']}>"
+            prefix.append(self.stoi.get(cls_token, self.stoi['<unk>']))
+        if item['type'] and torch.rand(1).item() < self.type_prob:
+            type_token = f"<type_{item['type']}>"
+            prefix.append(self.stoi.get(type_token, self.stoi['<unk>']))
+
+        encoded_seq = [self.stoi.get(c, self.stoi['<unk>']) for c in seq_str]
+
+        full_seq = [self.stoi['<start>']] + prefix + encoded_seq + [self.stoi['<eos>']]
+
+        if len(full_seq) > self.block_size + 1:
+            full_seq = full_seq[:self.block_size + 1]
+
+        x = full_seq[:-1]
+        y = full_seq[1:]
+
+        pad_len = self.block_size - len(x)
+        x += [self.pad_id] * pad_len
+        y += [self.pad_id] * pad_len
+
+        return torch.tensor(x, dtype=torch.long), torch.tensor(y, dtype=torch.long)
+
 
 # init these up here, can override if init_from='resume' (i.e. from a checkpoint)
 iter_num = 0
