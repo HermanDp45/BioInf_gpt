@@ -33,7 +33,7 @@ print(f"Uniq type: {len(unique_types)}")
 
 # 2. Создание словаря аминокислот (20 видов + 5 префиксов)
 amino_acids = "ARNDCQEGHILKMFPSTWYV"
-base_special = ['<eos>', '<unk>', '<sos>']
+base_special = ['<pad>','<eos>', '<unk>', '<sos>']
 class_tokens = [f'<cls_{c}>' for c in unique_classes if c]
 type_tokens = [f'<type_{t}>' for t in unique_types if t]
 

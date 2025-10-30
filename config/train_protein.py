@@ -7,7 +7,7 @@ max_iters = 1000
 dataset = 'protein'
 
 batch_size = 32
-block_size = 256
+block_size = 155
 
 n_layer = 6
 n_head = 8
