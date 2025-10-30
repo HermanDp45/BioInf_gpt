@@ -128,6 +128,7 @@ class ProteinDataset(Dataset):
         self.block_size = config['block_size']
         self.stoi = meta['stoi']
         self.pad_id = self.stoi['<pad>']
+        print(self.data_type)
     
     
     def __len__(self):
