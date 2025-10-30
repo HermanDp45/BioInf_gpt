@@ -162,7 +162,7 @@ class ProteinDataset(Dataset):
 
 # load sequences
 data_dir = os.path.join('data', dataset)
-sequences_path = os.path.join(data_dir, "sequence.pkl")
+sequences_path = os.path.join(data_dir, "sequences.pkl")
 meta_path = os.path.join(data_dir, 'meta.pkl')
 
 with open(sequences_path, 'rb') as f:
