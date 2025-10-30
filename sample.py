@@ -13,7 +13,7 @@ init_from = 'resume' # either 'resume' (from an out_dir) or a gpt2 variant (e.g.
 out_dir = 'out' # ignored if init_from is not 'resume'
 start = "\n" # or "<|endoftext|>" or etc. Can also specify a file, use as: "FILE:prompt.txt"
 num_samples = 10 # number of samples to draw
-max_new_tokens = 500 # number of tokens generated in each sample
+max_new_tokens = 200 # number of tokens generated in each sample
 temperature = 0.8 # 1.0 = no change, < 1.0 = less random, > 1.0 = more random, in predictions
 top_k = 200 # retain only the top_k most likely tokens, clamp others to have 0 probability
 seed = 1337
@@ -99,11 +99,11 @@ start_tokens = []
 
 if load_meta and stoi is not None:  # Only add special tokens if we have the custom vocabulary
     # Add start token
-    if '<start>' in stoi:
-        start_tokens.append(stoi['<start>'])
-        print("Added <start> token")
+    if '<sos>' in stoi:
+        start_tokens.append(stoi['<sos>'])
+        print("Added <sos> token")
     else:
-        print("Warning: <start> token not found in vocabulary")
+        print("Warning: <sos> token not found in vocabulary")
     
     # Add class token if specified
     if class_label is not None:

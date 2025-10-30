@@ -13,7 +13,7 @@ unique_classes = set()
 unique_types = set()
 print("Start download sequences...")
 for idx, item in enumerate(dataset):
-    if idx >= 10000: break
+    if idx >= 100000: break
     seq = item.get('sequence', '')
     if seq:
         cls = item.get('class', '').replace("/", "_").replace(" ", "")
@@ -33,11 +33,11 @@ print(f"Uniq type: {len(unique_types)}")
 
 # 2. Создание словаря аминокислот (20 видов + 5 префиксов)
 amino_acids = "ARNDCQEGHILKMFPSTWYV"
-base_special = ['<pad>', '<eos>', '<unk>', '<sos>']
+base_special = ['<eos>', '<unk>', '<sos>']
 class_tokens = [f'<cls_{c}>' for c in unique_classes if c]
 type_tokens = [f'<type_{t}>' for t in unique_types if t]
 
-special_tokens = base_special + class_tokens + type_tokens
+special_tokens = base_special + class_tokens + type_tokens + ["-"]
 chars = list(amino_acids) + special_tokens
 chars = sorted(list(set(chars)))
 stoi = {ch: i for i, ch in enumerate(chars)}

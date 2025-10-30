@@ -20,6 +20,6 @@ compile = False
 
 class_prob = 0.5
 type_prob = 0.3
-data_type = 'sequence'
+data_type = 'init_seq'
 prefix_mode = 'after_eos'
 
