@@ -18,7 +18,8 @@ learning_rate = 6e-4
 device = 'cpu'
 compile = False
 
-prob_class = 0.5
+class_prob = 0.5
 type_prob = 0.3
 data_type = 'sequence'
 prefix_mode = 'after_eos'
+
