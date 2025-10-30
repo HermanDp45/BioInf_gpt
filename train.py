@@ -76,12 +76,13 @@ compile = True # use PyTorch 2.0 to compile the model to be faster
 # protein
 class_prob = 0.5
 type_prob = 0.3
-data_type = None  # 'sequence' or 'init_seq'
+data_type = ""  # 'sequence' or 'init_seq'
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
 config = {k: globals()[k] for k in config_keys} # will be useful for logging
 # -----------------------------------------------------------------------------
+print(config)
 
 # various inits, derived attributes, I/O setup
 ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
