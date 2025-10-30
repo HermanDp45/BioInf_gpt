@@ -20,6 +20,8 @@ seed = 1337
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32' or 'bfloat16' or 'float16'
 compile = False # use PyTorch 2.0 to compile the model to be faster
+class_label = None  # new: class label (e.g., "human")
+type_label = None
 exec(open('configurator.py').read()) # overrides from command line or config file
 # -----------------------------------------------------------------------------
 
@@ -55,6 +57,8 @@ if compile:
 
 # look for the meta pickle in case it is available in the dataset folder
 load_meta = False
+stoi = None
+itos = None
 if init_from == 'resume' and 'config' in checkpoint and 'dataset' in checkpoint['config']: # older checkpoints might not have these...
     meta_path = os.path.join('data', checkpoint['config']['dataset'], 'meta.pkl')
     load_meta = os.path.exists(meta_path)
@@ -64,7 +68,8 @@ if load_meta:
         meta = pickle.load(f)
     # TODO want to make this more general to arbitrary encoder/decoder schemes
     stoi, itos = meta['stoi'], meta['itos']
-    encode = lambda s: [stoi[c] for c in s]
+    # Используем правильную encode функцию для посимвольного кодирования
+    encode = lambda s: [stoi.get(c, stoi['<unk>']) for c in s]
     decode = lambda l: ''.join([itos[i] for i in l])
 else:
     # ok let's assume gpt-2 encodings by default
@@ -77,8 +82,58 @@ else:
 if start.startswith('FILE:'):
     with open(start[5:], 'r', encoding='utf-8') as f:
         start = f.read()
+
+
+# start_ids = encode(start)
+# x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
+
+# # run generation
+# with torch.no_grad():
+#     with ctx:
+#         for k in range(num_samples):
+#             y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
+#             print(decode(y[0].tolist()))
+#             print('---------------')
+
+start_tokens = []
+
+if load_meta and stoi is not None:  # Only add special tokens if we have the custom vocabulary
+    # Add start token
+    if '<start>' in stoi:
+        start_tokens.append(stoi['<start>'])
+        print("Added <start> token")
+    else:
+        print("Warning: <start> token not found in vocabulary")
+    
+    # Add class token if specified
+    if class_label is not None:
+        class_token = f"<cls_{class_label}>"
+        if class_token in stoi:
+            start_tokens.append(stoi[class_token])
+            print(f"Added class token: {class_token}")
+        else:
+            print(f"Warning: Class token '{class_token}' not in vocabulary")
+    
+    # Add type token if specified
+    if type_label is not None:
+        type_token = f"<type_{type_label}>"
+        if type_token in stoi:
+            start_tokens.append(stoi[type_token])
+            print(f"Added type token: {type_token}")
+        else:
+            print(f"Warning: Type token '{type_token}' not in vocabulary")
+else:
+    if class_label is not None or type_label is not None:
+        print("Warning: class_label and type_label are ignored because no meta.pkl found")
+
+# Encode the user's text prompt
 start_ids = encode(start)
-x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
+start_tokens.extend(start_ids)  # Combine special tokens with user text
+
+x = (torch.tensor(start_tokens, dtype=torch.long, device=device)[None, ...])
+
+print(f"Final prompt tokens: {len(start_tokens)}")
+print(f"Starting generation with: {decode(start_tokens)}")
 
 # run generation
 with torch.no_grad():
