@@ -147,7 +147,7 @@ class ProteinDataset(Dataset):
 
         encoded_seq = [self.stoi.get(c, self.stoi['<unk>']) for c in seq_str]
 
-        full_seq = [self.stoi['<start>']] + prefix + encoded_seq + [self.stoi['<eos>']]
+        full_seq = [self.stoi['<sos>']] + prefix + encoded_seq + [self.stoi['<eos>']]
 
         if len(full_seq) > self.block_size + 1:
             full_seq = full_seq[:self.block_size + 1]
