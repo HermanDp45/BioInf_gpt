@@ -26,7 +26,7 @@ import numpy as np
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, DistributedSampler
 
 from model import GPTConfig, GPT
 
@@ -116,25 +116,9 @@ device_type = 'cuda' if 'cuda' in device else 'cpu' # for later use in torch.aut
 ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
 ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
-# poor man's data loader
-data_dir = os.path.join('data', dataset)
-def get_batch(split):
-    # We recreate np.memmap every batch to avoid a memory leak, as per
-    # https://stackoverflow.com/questions/45132940/numpy-memmap-memory-usage-want-to-iterate-once/61472122#61472122
-    if split == 'train':
-        data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
-    else:
-        data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
-    ix = torch.randint(len(data) - block_size, (batch_size,))
-    x = torch.stack([torch.from_numpy((data[i:i+block_size]).astype(np.int64)) for i in ix])
-    y = torch.stack([torch.from_numpy((data[i+1:i+1+block_size]).astype(np.int64)) for i in ix])
-    if device_type == 'cuda':
-        # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
-        x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
-    else:
-        x, y = x.to(device), y.to(device)
-    return x, y
-
+# ==================
+# New Block
+# ==================
 class ProteinDataset(Dataset):
     def __init__(self, sequences, config, meta):
         self.sequences = sequences
@@ -176,19 +160,71 @@ class ProteinDataset(Dataset):
 
         return torch.tensor(x, dtype=torch.long), torch.tensor(y, dtype=torch.long)
 
+# load sequences
+data_dir = os.path.join('data', dataset)
+sequences_path = os.path.join(data_dir, "sequence.pkl")
+meta_path = os.path.join(data_dir, 'meta.pkl')
+
+with open(sequences_path, 'rb') as f:
+    sequences = pickle.load(f)
+
+with open(meta_path, 'rb') as f:
+    meta = pickle.load(f)
+
+meta_vocab_size = meta['vocab_size']
+print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
+
+# split sequences into train/val
+split_idx = int(0.9 * len(sequences))
+train_sequences = sequences[:split_idx]
+val_sequences = sequences[split_idx:]
+
+# datasets
+train_dataset = ProteinDataset(train_sequences, config, meta)
+val_dataset = ProteinDataset(val_sequences, config, meta)
+
+# samplers for ddp
+train_sampler = DistributedSampler(train_dataset) if ddp else None
+val_sampler = DistributedSampler(val_dataset) if ddp else None
+
+# loaders
+train_loader = DataLoader(
+    train_dataset, batch_size=batch_size, shuffle=(train_sampler is None),
+    num_workers=0, sampler=train_sampler
+)
+val_loader = DataLoader(
+    val_dataset, batch_size=batch_size, shuffle=False,
+    num_workers=0, sampler=val_sampler
+)
+
+# =====================
+#   End new block
+# =====================
+
+# # poor man's data loader
+# data_dir = os.path.join('data', dataset)
+# def get_batch(split):
+#     # We recreate np.memmap every batch to avoid a memory leak, as per
+#     # https://stackoverflow.com/questions/45132940/numpy-memmap-memory-usage-want-to-iterate-once/61472122#61472122
+#     if split == 'train':
+#         data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
+#     else:
+#         data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
+#     ix = torch.randint(len(data) - block_size, (batch_size,))
+#     x = torch.stack([torch.from_numpy((data[i:i+block_size]).astype(np.int64)) for i in ix])
+#     y = torch.stack([torch.from_numpy((data[i+1:i+1+block_size]).astype(np.int64)) for i in ix])
+#     if device_type == 'cuda':
+#         # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
+#         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
+#     else:
+#         x, y = x.to(device), y.to(device)
+#     return x, y
+
+
 
 # init these up here, can override if init_from='resume' (i.e. from a checkpoint)
 iter_num = 0
 best_val_loss = 1e9
-
-# attempt to derive vocab_size from the dataset
-meta_path = os.path.join(data_dir, 'meta.pkl')
-meta_vocab_size = None
-if os.path.exists(meta_path):
-    with open(meta_path, 'rb') as f:
-        meta = pickle.load(f)
-    meta_vocab_size = meta['vocab_size']
-    print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
 
 # model init
 model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
@@ -263,10 +299,17 @@ if ddp:
 def estimate_loss():
     out = {}
     model.eval()
-    for split in ['train', 'val']:
+    for split, loader in [('train', train_loader), ('val', val_loader)]:
         losses = torch.zeros(eval_iters)
+        loader_iter = iter(loader)
         for k in range(eval_iters):
-            X, Y = get_batch(split)
+            try:
+                X, Y = next(loader_iter)
+            except StopIteration:
+                loader_iter = iter(loader)
+                X, Y = next(loader_iter)
+            X, Y = X.to(device), Y.to(device)
+            # X, Y = get_batch(split)
             with ctx:
                 logits, loss = model(X, Y)
             losses[k] = loss.item()
@@ -294,7 +337,11 @@ if wandb_log and master_process:
     wandb.init(project=wandb_project, name=wandb_run_name, config=config)
 
 # training loop
-X, Y = get_batch('train') # fetch the very first batch
+# X, Y = get_batch('train') # fetch the very first batch
+train_loader_iter = iter(train_loader)
+X, Y = next(train_loader_iter)
+X, Y = X.to(device), Y.to(device)
+
 t0 = time.time()
 local_iter_num = 0 # number of iterations in the lifetime of this process
 raw_model = model.module if ddp else model # unwrap DDP container if needed
@@ -347,7 +394,14 @@ while True:
             logits, loss = model(X, Y)
             loss = loss / gradient_accumulation_steps # scale the loss to account for gradient accumulation
         # immediately async prefetch next batch while model is doing the forward pass on the GPU
-        X, Y = get_batch('train')
+        
+        # X, Y = get_batch('train')
+        try:
+            X, Y = next(train_loader_iter)
+        except StopIteration:
+            train_loader_iter = iter(train_loader)
+            X, Y = next(train_loader_iter)
+        X, Y = X.to(device), Y.to(device)
         # backward pass, with gradient scaling if training in fp16
         scaler.scale(loss).backward()
     # clip the gradient
