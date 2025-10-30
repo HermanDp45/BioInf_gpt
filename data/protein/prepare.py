@@ -46,7 +46,7 @@ vocab_size = len(chars)
 
 print(f"Vocab size: {vocab_size}")
 
-with open('input/sequences.pkl', 'wb') as f:
+with open(os.path.join(os.path.dirname(__file__), 'sequences.pkl'), 'wb') as f:
     pickle.dump(sequences, f)
 
 print("Encoding sequences...")
@@ -62,4 +62,4 @@ meta = {
 with open(os.path.join(os.path.dirname(__file__), 'meta.pkl'), 'wb') as f:
     pickle.dump(meta, f)
 
-print("Ready. Files: sequences.pkl, input/meta.pkl")
+print("Ready. Files: sequences.pkl, meta.pkl")
