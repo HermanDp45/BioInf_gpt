@@ -36,7 +36,7 @@ for idx, item in enumerate(test_dataset):
         break
     seq = item.get('sequence', '')
     if seq:
-        cls = item.get('class', '').replace("/", "_").replace(" ", "")
+        cls = item.get('class', '').replace("/", "_").replace(" ", "").replace("-","_")
         typ = item.get('type', '')
         unique_classes.add(cls)
         unique_types.add(typ)

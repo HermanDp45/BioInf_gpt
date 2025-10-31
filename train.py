@@ -76,7 +76,7 @@ compile = True # use PyTorch 2.0 to compile the model to be faster
 # protein
 class_prob = 0.5
 type_prob = 0.3
-data_type = ""  # 'sequence' or 'init_seq'
+data_type = "sequence"  # 'sequence' or 'init_seq'
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
@@ -166,19 +166,9 @@ train_sequences_path = os.path.join(data_dir, "train_sequences.pkl")
 test_sequences_path = os.path.join(data_dir, "test_sequences.pkl")
 meta_path = os.path.join(data_dir, 'meta.pkl')
 
-# with open(sequences_path, 'rb') as f:
-#     sequences = pickle.load(f)
-
-# with open(meta_path, 'rb') as f:
-#     meta = pickle.load(f)
-
-# meta_vocab_size = meta['vocab_size']
-# print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
-
-# # split sequences into train/val
-# split_idx = int(0.9 * len(sequences))
-# train_sequences = sequences[:split_idx]
-# val_sequences = sequences[split_idx:]
+assert os.path.exists(train_sequences_path), f"Train file not found: {train_sequences_path}"
+assert os.path.exists(test_sequences_path), f"Val file not found: {val_sequences_path}"
+assert os.path.exists(meta_path), f"Meta file not found: {meta_path}"
 
 with open(train_sequences_path, 'rb') as f:
     train_sequences = pickle.load(f)

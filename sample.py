@@ -13,7 +13,7 @@ init_from = 'resume' # either 'resume' (from an out_dir) or a gpt2 variant (e.g.
 out_dir = 'out' # ignored if init_from is not 'resume'
 start = "" # or "<|endoftext|>" or etc. Can also specify a file, use as: "FILE:prompt.txt"
 num_samples = 10 # number of samples to draw
-max_new_tokens = 155 # number of tokens generated in each sample
+max_new_tokens = 400 # number of tokens generated in each sample
 temperature = 0.8 # 1.0 = no change, < 1.0 = less random, > 1.0 = more random, in predictions
 top_k = 200 # retain only the top_k most likely tokens, clamp others to have 0 probability
 seed = 1337
@@ -96,7 +96,7 @@ if load_meta and stoi is not None:  # Only add special tokens if we have the cus
     
     # Add class token if specified
     if class_label is not None:
-        class_token = f"<cls_{class_label}>"
+        class_token = f"<cls_{class_label.replace("/", "_").replace(" ", "").replace("-","_")}>"
         if class_token in stoi:
             start_tokens.append(stoi[class_token])
             print(f"Added class token: {class_token}")
