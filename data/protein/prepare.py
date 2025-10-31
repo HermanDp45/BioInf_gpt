@@ -4,15 +4,15 @@ import numpy as np
 from datasets import load_dataset
 from collections import Counter
 
-print("Loading dataset...")
 
-# 1. Загрука набора данных OAS95-aligned-cleaned
-dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="train", streaming=True)
-sequences = []
+print("Downloading train split...")
+train_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="train", streaming=True)
+train_sequences = []
 unique_classes = set()
 unique_types = set()
+
 print("Start download sequences...")
-for idx, item in enumerate(dataset):
+for idx, item in enumerate(train_dataset):
     if idx >= 100000: break
     seq = item.get('sequence', '')
     if seq:
@@ -20,16 +20,37 @@ for idx, item in enumerate(dataset):
         typ = item.get('type', '')
         unique_classes.add(cls)
         unique_types.add(typ)
-        sequences.append({
+        train_sequences.append({
             'sequence': seq.upper(),
             'init_seq': item.get('init_seq', '').upper(),
             'class': cls,  # очищенный
             'type': typ
         })
 
-print(f"Downloaded {len(sequences)} sequences.")
-print(f"Uniq class: {len(unique_classes)}")
-print(f"Uniq type: {len(unique_types)}")
+test_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="test", streaming=True)
+test_sequences = []
+
+print("Downloading test split...")
+for idx, item in enumerate(test_dataset):
+    if idx >= 10000: 
+        break
+    seq = item.get('sequence', '')
+    if seq:
+        cls = item.get('class', '').replace("/", "_").replace(" ", "")
+        typ = item.get('type', '')
+        unique_classes.add(cls)
+        unique_types.add(typ)
+        test_sequences.append({
+            'sequence': seq.upper(),
+            'init_seq': item.get('init_seq', '').upper(),
+            'class': cls,
+            'type': typ
+        })
+
+print(f"Train: {len(train_sequences)} sequences")
+print(f"Test (val): {len(test_sequences)} sequences")
+print(f"Unique classes: {len(unique_classes)}")
+print(f"Unique types: {len(unique_types)}")
 
 # 2. Создание словаря аминокислот (20 видов + 5 префиксов)
 amino_acids = "ARNDCQEGHILKMFPSTWYV"
@@ -46,20 +67,28 @@ vocab_size = len(chars)
 
 print(f"Vocab size: {vocab_size}")
 
-with open(os.path.join(os.path.dirname(__file__), 'sequences.pkl'), 'wb') as f:
-    pickle.dump(sequences, f)
+# with open(os.path.join(os.path.dirname(__file__), 'sequences.pkl'), 'wb') as f:
+#     pickle.dump(sequences, f)
 
-print("Encoding sequences...")
+print("Saving sequences to files")
+with open(os.path.join(os.path.dirname(__file__), 'train_sequences.pkl'), 'wb') as f:
+    pickle.dump(train_sequences, f)
 
+with open(os.path.join(os.path.dirname(__file__), 'val_sequences.pkl'), 'wb') as f:
+    pickle.dump(test_sequences, f)
+
+print("Generatin meta...")
 meta = {
     'vocab_size': vocab_size,
     'itos': itos,
     'stoi': stoi,
-    'num_sequences': len(sequences),
-    'avg_length': np.mean([len(s['sequence']) for s in sequences])
+    'num_train': len(train_sequences),
+    'num_val': len(test_sequences),
+    'avg_train_length': np.mean([len(s['sequence']) for s in train_sequences]) if train_sequences else 0,
+    'avg_val_length': np.mean([len(s['sequence']) for s in test_sequences]) if test_sequences else 0
 }
 
 with open(os.path.join(os.path.dirname(__file__), 'meta.pkl'), 'wb') as f:
     pickle.dump(meta, f)
 
-print("Ready. Files: sequences.pkl, meta.pkl")
+print("Ready. Files: train_sequences.pkl, test_sequences.pkl, meta.pkl")

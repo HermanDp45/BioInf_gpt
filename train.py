@@ -162,11 +162,29 @@ class ProteinDataset(Dataset):
 
 # load sequences
 data_dir = os.path.join('data', dataset)
-sequences_path = os.path.join(data_dir, "sequences.pkl")
+train_sequences_path = os.path.join(data_dir, "train_sequences.pkl")
+test_sequences_path = os.path.join(data_dir, "test_sequences.pkl")
 meta_path = os.path.join(data_dir, 'meta.pkl')
 
-with open(sequences_path, 'rb') as f:
-    sequences = pickle.load(f)
+# with open(sequences_path, 'rb') as f:
+#     sequences = pickle.load(f)
+
+# with open(meta_path, 'rb') as f:
+#     meta = pickle.load(f)
+
+# meta_vocab_size = meta['vocab_size']
+# print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
+
+# # split sequences into train/val
+# split_idx = int(0.9 * len(sequences))
+# train_sequences = sequences[:split_idx]
+# val_sequences = sequences[split_idx:]
+
+with open(train_sequences_path, 'rb') as f:
+    train_sequences = pickle.load(f)
+
+with open(test_sequences_path, 'rb') as f:
+    test_sequences = pickle.load(f)
 
 with open(meta_path, 'rb') as f:
     meta = pickle.load(f)
@@ -174,14 +192,9 @@ with open(meta_path, 'rb') as f:
 meta_vocab_size = meta['vocab_size']
 print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
 
-# split sequences into train/val
-split_idx = int(0.9 * len(sequences))
-train_sequences = sequences[:split_idx]
-val_sequences = sequences[split_idx:]
-
 # datasets
 train_dataset = ProteinDataset(train_sequences, config, meta)
-val_dataset = ProteinDataset(val_sequences, config, meta)
+val_dataset = ProteinDataset(test_sequences, config, meta)
 
 # samplers for ddp
 train_sampler = DistributedSampler(train_dataset) if ddp else None
