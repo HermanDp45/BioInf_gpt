@@ -13,7 +13,7 @@ unique_types = set()
 
 print("Start download sequences...")
 for idx, item in enumerate(train_dataset):
-    if idx >= 100000: break
+    # if idx >= 100000: break
     seq = item.get('sequence', '')
     if seq:
         cls = item.get('class', '').replace("/", "_").replace(" ", "").replace("-","_")
@@ -32,8 +32,8 @@ test_sequences = []
 
 print("Downloading test split...")
 for idx, item in enumerate(test_dataset):
-    if idx >= 10000: 
-        break
+    # if idx >= 10000: 
+    #     break
     seq = item.get('sequence', '')
     if seq:
         cls = item.get('class', '').replace("/", "_").replace(" ", "").replace("-","_")
