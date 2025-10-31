@@ -167,7 +167,7 @@ test_sequences_path = os.path.join(data_dir, "test_sequences.pkl")
 meta_path = os.path.join(data_dir, 'meta.pkl')
 
 assert os.path.exists(train_sequences_path), f"Train file not found: {train_sequences_path}"
-assert os.path.exists(test_sequences_path), f"Val file not found: {val_sequences_path}"
+assert os.path.exists(test_sequences_path), f"Val file not found: {test_sequences_path}"
 assert os.path.exists(meta_path), f"Meta file not found: {meta_path}"
 
 with open(train_sequences_path, 'rb') as f:
