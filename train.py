@@ -139,6 +139,8 @@ class ProteinDataset(Dataset):
         item = self.sequences[idx]
         seq_str = item[self.data_type] if self.data_type in item else item['sequence']
 
+        print(seq_str)
+
         prefix = []
         if item['class'] and torch.rand(1).item() < self.class_prob:
             cls_token = f"<cls_{item['class']}>"
@@ -150,7 +152,7 @@ class ProteinDataset(Dataset):
         encoded_seq = [self.stoi.get(c, self.stoi['<unk>']) for c in seq_str]
 
         full_seq = [self.stoi['<sos>']] + prefix + encoded_seq + [self.stoi['<eos>']]
-
+        print(full_seq)
         if len(full_seq) > self.block_size + 1:
             full_seq = full_seq[:self.block_size + 1]
 
