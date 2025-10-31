@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 from datasets import load_dataset
 from collections import Counter
+from tqdm import tqdm
 
 
 print("Downloading train split...")
@@ -12,7 +13,7 @@ unique_classes = set()
 unique_types = set()
 
 print("Start download sequences...")
-for idx, item in enumerate(train_dataset):
+for idx, item in tqdm(enumerate(train_dataset), desc="Loading test sequences"):
     # if idx >= 100000: break
     seq = item.get('sequence', '')
     if seq:
@@ -31,7 +32,7 @@ test_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split
 test_sequences = []
 
 print("Downloading test split...")
-for idx, item in enumerate(test_dataset):
+for idx, item in tqdm(enumerate(test_dataset), desc="Loading test sequences"):
     # if idx >= 10000: 
     #     break
     seq = item.get('sequence', '')
