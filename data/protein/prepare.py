@@ -7,14 +7,14 @@ from tqdm import tqdm
 
 
 print("Downloading train split...")
-train_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="train")
+train_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="train", streaming=True)
 train_sequences = []
 unique_classes = set()
 unique_types = set()
 
 print("Start download sequences...")
 for idx, item in tqdm(enumerate(train_dataset), desc="Loading test sequences"):
-    # if idx >= 100000: break
+    if idx >= 2000000: break
     seq = item.get('sequence', '')
     if seq:
         cls = item.get('class', '').replace("/", "_").replace(" ", "").replace("-","_")
