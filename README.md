@@ -1,3 +1,25 @@
+# Запуск
+
+```bash
+python data/protein/prepare.py
+```
+
+```bash
+python train.py config/train_protein.py --out_dir=out-test \
+                --device=cpu \
+                --batch_size=8 \
+                --block_size=64 \
+                --n_layer=2 \
+                --n_head=2 \
+                --n_embd=64 \
+                --max_iters=100 \
+                --eval_interval=10 \
+                --log_interval=10 
+```
+
+```bash
+python sample.py --out_dir=out-test --device=cpu  --max_new_tokens=300 --max_protein_length=200
+```
 
 # nanoGPT
 
