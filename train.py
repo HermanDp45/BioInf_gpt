@@ -21,7 +21,7 @@ import time
 import math
 import pickle
 from contextlib import nullcontext
-from datasets import load_from_disk, IterableDataset
+from datasets import load_dataset, IterableDataset
 import numpy as np
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
