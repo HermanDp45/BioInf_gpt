@@ -74,7 +74,7 @@ print("Saving sequences to files")
 with open(os.path.join(os.path.dirname(__file__), 'train_sequences.pkl'), 'wb') as f:
     pickle.dump(train_sequences, f)
 
-with open(os.path.join(os.path.dirname(__file__), 'val_sequences.pkl'), 'wb') as f:
+with open(os.path.join(os.path.dirname(__file__), 'test_sequences.pkl'), 'wb') as f:
     pickle.dump(test_sequences, f)
 
 print("Generatin meta...")
