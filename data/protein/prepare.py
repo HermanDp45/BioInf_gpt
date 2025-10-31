@@ -1,95 +1,124 @@
+# saves the OAS95-aligned-cleaned dataset to structured files using Hugging Face datasets.
+# This script saves raw strings of sequences to allow dynamic tokenization and vocab filtering 
+# based on 'sequence' vs 'init_seq' at training time.
+
 import os
 import pickle
 import numpy as np
-from datasets import load_dataset
-from collections import Counter
 from tqdm import tqdm
+from datasets import load_dataset 
 
+# --- 1. Classes and types from dataset ---
+# Using for creating vocab
 
-print("Downloading train split...")
-train_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="train", streaming=True)
-train_sequences = []
-unique_classes = set()
-unique_types = set()
+# 17 classes
+FULL_CLEANED_CLASSES = [
+    'Camel', 'HIS_mouse', 'human', 'mouse_BALB_c', 'mouse_Balb_c', 'mouse_C57BL_6',
+    'mouse_C57BL_6J', 'mouse_Igh_wt', 'mouse_Ighe_e', 'mouse_Ighg_g',
+    'mouse_RAG2_GFP_129Sve', 'mouse_Swiss_Webster', 'mouse_outbred',
+    'mouse_outbred_C57BL_6', 'rabbit', 'rat', 'rhesus',
+]
 
-print("Start download sequences...")
-for idx, item in tqdm(enumerate(train_dataset), desc="Loading test sequences"):
-    if idx >= 2000000: break
-    seq = item.get('sequence', '')
-    if seq:
-        cls = item.get('class', '').replace("/", "_").replace(" ", "").replace("-","_")
-        typ = item.get('type', '')
-        unique_classes.add(cls)
-        unique_types.add(typ)
-        train_sequences.append({
-            'sequence': seq.upper(),
-            'init_seq': item.get('init_seq', '').upper(),
-            'class': cls,  # очищенный
-            'type': typ
-        })
+# 2 typees
+FULL_CLEANED_TYPES = [
+    'Heavy', 'Light'
+]
 
-test_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="test", streaming=True)
-test_sequences = []
+unique_classes = set(FULL_CLEANED_CLASSES)
+unique_types = set(FULL_CLEANED_TYPES)
 
-print("Downloading test split...")
-for idx, item in tqdm(enumerate(test_dataset), desc="Loading test sequences"):
-    # if idx >= 10000: 
-    #     break
-    seq = item.get('sequence', '')
-    if seq:
-        cls = item.get('class', '').replace("/", "_").replace(" ", "").replace("-","_")
-        typ = item.get('type', '')
-        unique_classes.add(cls)
-        unique_types.add(typ)
-        test_sequences.append({
-            'sequence': seq.upper(),
-            'init_seq': item.get('init_seq', '').upper(),
-            'class': cls,
-            'type': typ
-        })
+# --- 2. Create Vocab ---
 
-print(f"Train: {len(train_sequences)} sequences")
-print(f"Test (val): {len(test_sequences)} sequences")
-print(f"Unique classes: {len(unique_classes)}")
-print(f"Unique types: {len(unique_types)}")
+# Parametrs
+num_proc = 8 
+num_proc_load_dataset = num_proc
 
-# 2. Создание словаря аминокислот (20 видов + 5 префиксов)
+# dictionary of all tokens
 amino_acids = "ARNDCQEGHILKMFPSTWYV"
-base_special = ['<pad>','<eos>', '<unk>', '<sos>']
+base_special = ['<pad>','<eos>', '<unk>', '<sos>'] 
 class_tokens = [f'<cls_{c}>' for c in unique_classes if c]
 type_tokens = [f'<type_{t}>' for t in unique_types if t]
 
-special_tokens = base_special + class_tokens + type_tokens + ["-"]
+special_tokens = base_special + class_tokens + type_tokens + ["-"] 
 chars = list(amino_acids) + special_tokens
-chars = sorted(list(set(chars)))
-stoi = {ch: i for i, ch in enumerate(chars)}
-itos = {i: ch for i, ch in enumerate(chars)}
+chars = sorted(list(set(chars))) 
+stoi = {ch: i for i, ch in enumerate(chars)} 
+itos = {i: ch for i, ch in enumerate(chars)} 
 vocab_size = len(chars)
 
-print(f"Vocab size: {vocab_size}")
+print(f"Vocab size (full, including '-'): {vocab_size}")
 
-# with open(os.path.join(os.path.dirname(__file__), 'sequences.pkl'), 'wb') as f:
-#     pickle.dump(sequences, f)
+# --- 3. Process and save raw rows ---
 
-print("Saving sequences to files")
-with open(os.path.join(os.path.dirname(__file__), 'train_sequences.pkl'), 'wb') as f:
-    pickle.dump(train_sequences, f)
+def process_raw(example):
+    """
+    Save raw rows and meta
+    """
+    # get clear classes and types
+    cls = example.get('class', '').replace("/", "_").replace(" ", "").replace("-","_")
+    typ = example.get('type', '')
+    
+    # save in upper reg
+    seq = example.get('sequence', '').upper()
+    init_seq = example.get('init_seq', '').upper()
+    
+    return {
+        'sequence': seq, 
+        'init_seq': init_seq,
+        'class_clean': cls, 
+        'type_clean': typ,
+        'len': len(seq)
+    }
 
-with open(os.path.join(os.path.dirname(__file__), 'test_sequences.pkl'), 'wb') as f:
-    pickle.dump(test_sequences, f)
+if __name__ == '__main__':
+    # Dataset downloading
+    print("\nStart loading from Hugging Face...")
+    train_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="train[:100000]", num_proc=num_proc_load_dataset)
+    test_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="test", num_proc=num_proc_load_dataset)
 
-print("Generatin meta...")
-meta = {
-    'vocab_size': vocab_size,
-    'itos': itos,
-    'stoi': stoi,
-    'num_train': len(train_sequences),
-    'num_val': len(test_sequences),
-    'avg_train_length': np.mean([len(s['sequence']) for s in train_sequences]) if train_sequences else 0,
-    'avg_val_length': np.mean([len(s['sequence']) for s in test_sequences]) if test_sequences else 0
-}
+    dataset = {
+        'train': train_dataset,
+        'val': test_dataset 
+    }
+    
+    # Dataset process: save rows and meta.pcl 
+    processed_dataset = {}
+    for split_name, dset in dataset.items():
+        processed_dataset[split_name] = dset.map(
+            process_raw,
+            remove_columns=[col for col in dset.column_names if col not in ['sequence', 'init_seq', 'class', 'type']],
+            desc=f"processing the {split_name} split",
+            num_proc=num_proc,
+        )
 
-with open(os.path.join(os.path.dirname(__file__), 'meta.pkl'), 'wb') as f:
-    pickle.dump(meta, f)
+    # --- 4. Save to disk (HF format) ---
 
-print("Ready. Files: train_sequences.pkl, test_sequences.pkl, meta.pkl")
+    output_dir = os.path.dirname(__file__)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    print("\nSave to disk (HF format) (HF format)...")
+
+    for split, dset in processed_dataset.items():
+        data_path = os.path.join(output_dir, f'{split}_hf_data')
+        # save to disk not RAM
+        dset.save_to_disk(data_path)
+        print(f"Saved {split} data to: {data_path}")
+        
+    # --- 5. Save Meta ---
+
+    print("\Generating meta.pkl...")
+    meta = {
+        'vocab_size': vocab_size,
+        'itos': itos,
+        'stoi': stoi,
+        'num_train': len(processed_dataset['train']),
+        'num_val': len(processed_dataset['val']),
+        'avg_train_length': np.mean(processed_dataset['train']['len']) if len(processed_dataset['train']) else 0,
+        'avg_val_length': np.mean(processed_dataset['val']['len']) if len(processed_dataset['val']) else 0
+    }
+
+    meta_path = os.path.join(output_dir, 'meta.pkl')
+    with open(meta_path, 'wb') as f:
+        pickle.dump(meta, f)
+
+    print(f"\Ready. files: train_hf_data/, val_hf_data/, {meta_path}")

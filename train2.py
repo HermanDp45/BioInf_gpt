@@ -21,7 +21,7 @@ import time
 import math
 import pickle
 from contextlib import nullcontext
-from datasets import load_from_disk
+
 import numpy as np
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -119,80 +119,51 @@ ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=
 # ==================
 # New Block
 # ==================
-class FlexibleProteinDataset(Dataset):
-    """
-    Датасет, который загружает сырые строки последовательностей и метаданные 
-    с диска (Hugging Face format) и выполняет токенизацию в рантайме.
-    
-    Это позволяет динамически применять class_prob/type_prob и фильтровать 
-    словарь в зависимости от data_type ('sequence' vs 'init_seq').
-    """
-    def __init__(self, data_path, config, meta):
-        # download only meta and seq
-        self.hf_dataset = load_from_disk(data_path)
-        
+class ProteinDataset(Dataset):
+    def __init__(self, sequences, config, meta):
+        self.sequences = sequences
         self.class_prob = config['class_prob']
         self.type_prob = config['type_prob']
-        self.data_type = config['data_type'] # 'sequence' or 'init_seq'
+        self.data_type = config['data_type']
         self.block_size = config['block_size']
         self.stoi = meta['stoi']
-        
-        # ID special tokens
         self.pad_id = self.stoi['<pad>']
-        self.sos_id = self.stoi['<sos>']
-        self.eos_id = self.stoi['<eos>']
     
     def __len__(self):
-        return len(self.hf_dataset)
+        return len(self.sequences)
     
     def __getitem__(self, idx):
-        item = self.hf_dataset[idx] 
-        
-        if self.data_type == 'sequence':
-            seq_str = item['sequence']
-        elif self.data_type == 'init_seq':
-            seq_str = item['init_seq']
-        else:
-            seq_str = item['sequence']
+        item = self.sequences[idx]
+        seq_str = item[self.data_type] if self.data_type in item else item['sequence']
 
-        # 1. Prefix creation
         prefix = []
-        
-        # Class Token 
-        if item['class_clean'] and torch.rand(1).item() < self.class_prob:
-            cls_token = f"<cls_{item['class_clean']}>"
+        if item['class'] and torch.rand(1).item() < self.class_prob:
+            cls_token = f"<cls_{item['class']}>"
             prefix.append(self.stoi.get(cls_token, self.stoi['<unk>']))
-            
-        # Type token
-        if item['type_clean'] and torch.rand(1).item() < self.type_prob:
-            type_token = f"<type_{item['type_clean']}>"
+        if item['type'] and torch.rand(1).item() < self.type_prob:
+            type_token = f"<type_{item['type']}>"
             prefix.append(self.stoi.get(type_token, self.stoi['<unk>']))
 
-        # 2. Tokenization
         encoded_seq = [self.stoi.get(c, self.stoi['<unk>']) for c in seq_str]
 
-        # 3.create full
-        full_seq = [self.sos_id] + prefix + encoded_seq + [self.eos_id]
+        full_seq = [self.stoi['<sos>']] + prefix + encoded_seq + [self.stoi['<eos>']]
 
-        # 4. Cut to block size
         if len(full_seq) > self.block_size + 1:
             full_seq = full_seq[:self.block_size + 1]
 
         x = full_seq[:-1]
         y = full_seq[1:]
 
-        # 5. expand to block size
         pad_len = self.block_size - len(x)
         x += [self.pad_id] * pad_len
         y += [self.pad_id] * pad_len
 
         return torch.tensor(x, dtype=torch.long), torch.tensor(y, dtype=torch.long)
 
-
 # load sequences
 data_dir = os.path.join('data', dataset)
-train_data_path = os.path.join(data_dir, "train_hf_data") 
-val_data_path = os.path.join(data_dir, "val_hf_data")
+train_sequences_path = os.path.join(data_dir, "train_sequences.pkl")
+test_sequences_path = os.path.join(data_dir, "test_sequences.pkl")
 meta_path = os.path.join(data_dir, 'meta.pkl')
 
 assert os.path.exists(train_sequences_path), f"Train file not found: {train_sequences_path}"
@@ -208,26 +179,23 @@ with open(test_sequences_path, 'rb') as f:
 with open(meta_path, 'rb') as f:
     meta = pickle.load(f)
 
-# Check type
 if data_type == 'init_seq':
-    chars_to_keep = [c for c in meta['itos'].values() if c != '-']
-    
-    meta['itos'] = {i: ch for i, ch in enumerate(chars_to_keep)}
-    meta['stoi'] = {ch: i for i, ch in enumerate(chars_to_keep)}
-    meta['vocab_size'] = len(chars_to_keep)
-    
+    chars = [c for c in meta['itos'].values() if c != '-']
+    meta['itos'] = {i: ch for i, ch in enumerate(chars)}
+    meta['stoi'] = {ch: i for i, ch in enumerate(chars)}
+    meta['vocab_size'] = len(chars)
+    print(f"Updated vocab_size to {meta['vocab_size']} (removed '-')")
+
     with open(meta_path, 'wb') as f:
         pickle.dump(meta, f)
-    
-    print(f"Updated vocab_size to {meta['vocab_size']} (removed '-' for data_type='init_seq')")
     print(f"Saved updated meta to {meta_path}")
 
 meta_vocab_size = meta['vocab_size']
 print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
 
 # datasets
-train_dataset = FlexibleProteinDataset(train_data_path, config, meta)
-val_dataset = FlexibleProteinDataset(val_data_path, config, meta)
+train_dataset = ProteinDataset(train_sequences, config, meta)
+val_dataset = ProteinDataset(test_sequences, config, meta)
 
 # samplers for ddp
 train_sampler = DistributedSampler(train_dataset) if ddp else None
