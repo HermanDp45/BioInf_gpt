@@ -96,7 +96,7 @@ if load_meta and stoi is not None:  # Only add special tokens if we have the cus
     
     # Add class token if specified
     if class_label is not None:
-        class_token = f"<cls_{class_label.replace("/", "_").replace(" ", "").replace("-","_")}>"
+        class_token = f"<cls_{class_label.replace('/', '_').replace(' ', '').replace('-', '_')}>"
         if class_token in stoi:
             start_tokens.append(stoi[class_token])
             print(f"Added class token: {class_token}")
