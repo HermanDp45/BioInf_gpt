@@ -82,7 +82,6 @@ config_keys = [k for k,v in globals().items() if not k.startswith('_') and isins
 exec(open('configurator.py').read()) # overrides from command line or config file
 config = {k: globals()[k] for k in config_keys} # will be useful for logging
 # -----------------------------------------------------------------------------
-print(config)
 
 # various inits, derived attributes, I/O setup
 ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
@@ -129,8 +128,6 @@ class ProteinDataset(Dataset):
         self.block_size = config['block_size']
         self.stoi = meta['stoi']
         self.pad_id = self.stoi['<pad>']
-        print(self.data_type)
-    
     
     def __len__(self):
         return len(self.sequences)
@@ -138,8 +135,6 @@ class ProteinDataset(Dataset):
     def __getitem__(self, idx):
         item = self.sequences[idx]
         seq_str = item[self.data_type] if self.data_type in item else item['sequence']
-
-        print(seq_str)
 
         prefix = []
         if item['class'] and torch.rand(1).item() < self.class_prob:
@@ -152,7 +147,7 @@ class ProteinDataset(Dataset):
         encoded_seq = [self.stoi.get(c, self.stoi['<unk>']) for c in seq_str]
 
         full_seq = [self.stoi['<sos>']] + prefix + encoded_seq + [self.stoi['<eos>']]
-        print(full_seq)
+
         if len(full_seq) > self.block_size + 1:
             full_seq = full_seq[:self.block_size + 1]
 
