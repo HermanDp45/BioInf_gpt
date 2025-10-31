@@ -119,60 +119,53 @@ ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=
 # ==================
 # New Block
 # ==================
-class FlexibleProteinDataset(IterableDataset): # <-- Унаследован от IterableDataset
-    def __init__(self, split_name, config, meta):
-        self.hf_dataset = load_dataset(
-            "bayes-group-diffusion/OAS95-aligned-cleaned", 
-            split=split_name, 
-            streaming=True
-        )
-
+class FlexibleProteinDataset(Dataset):
+    """
+    Датасет, который загружает сырые строки последовательностей и метаданные 
+    с диска (Hugging Face format) и выполняет токенизацию в рантайме.
+    
+    Это позволяет динамически применять class_prob/type_prob и фильтровать 
+    словарь в зависимости от data_type ('sequence' vs 'init_seq').
+    """
+    def __init__(self, data_path, config, meta):
+        # download only meta and seq
+        self.hf_dataset = load_from_disk(data_path)
+        
         self.class_prob = config['class_prob']
         self.type_prob = config['type_prob']
         self.data_type = config['data_type'] # 'sequence' or 'init_seq'
         self.block_size = config['block_size']
         self.stoi = meta['stoi']
-        self.meta = meta
         
         # ID special tokens
         self.pad_id = self.stoi['<pad>']
         self.sos_id = self.stoi['<sos>']
         self.eos_id = self.stoi['<eos>']
     
-    def __iter__(self):
-        # 1. Потоковое преобразование (map)
-        processed_stream = self.hf_dataset.map(self._process_single_example)
+    def __len__(self):
+        return len(self.hf_dataset)
+    
+    def __getitem__(self, idx):
+        item = self.hf_dataset[idx] 
         
-        if ddp:
-            rank = int(os.environ['RANK'])
-            world_size = int(os.environ['WORLD_SIZE'])
-
-            processed_stream = processed_stream.shard(num_shards=world_size, index=rank)
-
-        for item in processed_stream:
-            yield item['X'], item['Y']
-
-    def _process_single_example(self, item):
         if self.data_type == 'sequence':
-            seq_str = item.get('sequence', '').upper()
+            seq_str = item['sequence']
         elif self.data_type == 'init_seq':
-            seq_str = item.get('init_seq', '').upper()
+            seq_str = item['init_seq']
         else:
-            seq_str = item.get('sequence', '').upper()
+            seq_str = item['sequence']
 
         # 1. Prefix creation
         prefix = []
-        cls = item.get('class', '').replace("/", "_").replace(" ", "").replace("-","_")
-        typ = item.get('type', '')
         
         # Class Token 
-        if cls and torch.rand(1).item() < self.class_prob:
-            cls_token = f"<cls_{cls}>"
+        if item['class_clean'] and torch.rand(1).item() < self.class_prob:
+            cls_token = f"<cls_{item['class_clean']}>"
             prefix.append(self.stoi.get(cls_token, self.stoi['<unk>']))
             
         # Type token
-        if typ and torch.rand(1).item() < self.type_prob:
-            type_token = f"<type_{typ}>"
+        if item['type_clean'] and torch.rand(1).item() < self.type_prob:
+            type_token = f"<type_{item['type_clean']}>"
             prefix.append(self.stoi.get(type_token, self.stoi['<unk>']))
 
         # 2. Tokenization
@@ -192,18 +185,25 @@ class FlexibleProteinDataset(IterableDataset): # <-- Унаследован от
         pad_len = self.block_size - len(x)
         x += [self.pad_id] * pad_len
         y += [self.pad_id] * pad_len
-        
-        # Возвращаем тензоры как словарь
-        return {
-            'X': torch.tensor(x, dtype=torch.long), 
-            'Y': torch.tensor(y, dtype=torch.long)
-        }
+
+        return torch.tensor(x, dtype=torch.long), torch.tensor(y, dtype=torch.long)
+
 
 # load sequences
 data_dir = os.path.join('data', dataset)
+train_data_path = os.path.join(data_dir, "train_hf_data") 
+val_data_path = os.path.join(data_dir, "val_hf_data")
 meta_path = os.path.join(data_dir, 'meta.pkl')
 
+assert os.path.exists(train_sequences_path), f"Train file not found: {train_sequences_path}"
+assert os.path.exists(test_sequences_path), f"Val file not found: {test_sequences_path}"
 assert os.path.exists(meta_path), f"Meta file not found: {meta_path}"
+
+with open(train_sequences_path, 'rb') as f:
+    train_sequences = pickle.load(f)
+
+with open(test_sequences_path, 'rb') as f:
+    test_sequences = pickle.load(f)
 
 with open(meta_path, 'rb') as f:
     meta = pickle.load(f)
@@ -226,16 +226,16 @@ meta_vocab_size = meta['vocab_size']
 print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
 
 # datasets
-train_dataset = FlexibleProteinDataset(split_name="train", config=config, meta=meta) 
-val_dataset = FlexibleProteinDataset(split_name="test", config=config, meta=meta)
+train_dataset = FlexibleProteinDataset(train_data_path, config, meta)
+val_dataset = FlexibleProteinDataset(val_data_path, config, meta)
 
 # samplers for ddp
-train_sampler = None
-val_sampler = None
+train_sampler = DistributedSampler(train_dataset) if ddp else None
+val_sampler = DistributedSampler(val_dataset) if ddp else None
 
 # loaders
 train_loader = DataLoader(
-    train_dataset, batch_size=batch_size, shuffle=False,
+    train_dataset, batch_size=batch_size, shuffle=(train_sampler is None),
     num_workers=0, sampler=train_sampler
 )
 val_loader = DataLoader(
