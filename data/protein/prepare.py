@@ -73,7 +73,7 @@ def process_raw(example):
 if __name__ == '__main__':
     # Dataset downloading
     print("\nStart loading from Hugging Face...")
-    train_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="train[:100000]", num_proc=num_proc_load_dataset)
+    train_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="train[:1000]", num_proc=num_proc_load_dataset)
     test_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="test", num_proc=num_proc_load_dataset)
 
     dataset = {
