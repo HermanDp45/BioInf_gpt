@@ -186,6 +186,10 @@ if data_type == 'init_seq':
     meta['vocab_size'] = len(chars)
     print(f"Updated vocab_size to {meta['vocab_size']} (removed '-')")
 
+    with open(meta_path, 'wb') as f:
+        pickle.dump(meta, f)
+    print(f"Saved updated meta to {meta_path}")
+
 meta_vocab_size = meta['vocab_size']
 print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
 
