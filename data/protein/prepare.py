@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 
 print("Downloading train split...")
-train_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="train", streaming=True)
+train_dataset = load_dataset("bayes-group-diffusion/OAS95-aligned-cleaned", split="train")
 train_sequences = []
 unique_classes = set()
 unique_types = set()
