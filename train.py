@@ -116,9 +116,7 @@ device_type = 'cuda' if 'cuda' in device else 'cpu' # for later use in torch.aut
 ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
 ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
-# ==================
-# New Block
-# ==================
+# Iterible dataset for download row, preprocess row, generate x,y for train loop
 class FlexibleProteinDataset(IterableDataset): # <-- Унаследован от IterableDataset
     def __init__(self, split_name, config, meta):
         self.hf_dataset = load_dataset(
@@ -140,7 +138,6 @@ class FlexibleProteinDataset(IterableDataset): # <-- Унаследован от
         self.eos_id = self.stoi['<eos>']
     
     def __iter__(self):
-        # 1. Потоковое преобразование (map)
         processed_stream = self.hf_dataset.map(self._process_single_example)
         
         if ddp:
@@ -152,7 +149,9 @@ class FlexibleProteinDataset(IterableDataset): # <-- Унаследован от
         for item in processed_stream:
             yield item['X'], item['Y']
 
+    # process row
     def _process_single_example(self, item):
+        # checking type to get seq
         if self.data_type == 'sequence':
             seq_str = item.get('sequence', '').upper()
         elif self.data_type == 'init_seq':
@@ -160,9 +159,9 @@ class FlexibleProteinDataset(IterableDataset): # <-- Унаследован от
         else:
             seq_str = item.get('sequence', '').upper()
 
-        # 1. Prefix creation
+        # Prefix creation
         prefix = []
-        cls = item.get('class', '').replace("/", "_").replace(" ", "").replace("-","_")
+        cls = item.get('class', '').replace("/", "_").replace(" ", "").replace("-","_") 
         typ = item.get('type', '')
         
         # Class Token 
@@ -175,31 +174,30 @@ class FlexibleProteinDataset(IterableDataset): # <-- Унаследован от
             type_token = f"<type_{typ}>"
             prefix.append(self.stoi.get(type_token, self.stoi['<unk>']))
 
-        # 2. Tokenization
+        # Tokenization
         encoded_seq = [self.stoi.get(c, self.stoi['<unk>']) for c in seq_str]
 
-        # 3.create full
+        # create full seq
         full_seq = [self.sos_id] + prefix + encoded_seq + [self.eos_id]
 
-        # 4. Cut to block size
+        # Cut to block size (working with batch)
         if len(full_seq) > self.block_size + 1:
             full_seq = full_seq[:self.block_size + 1]
 
         x = full_seq[:-1]
         y = full_seq[1:]
 
-        # 5. expand to block size
+        # expand to block size (working with batch)
         pad_len = self.block_size - len(x)
         x += [self.pad_id] * pad_len
         y += [self.pad_id] * pad_len
         
-        # Возвращаем тензоры как словарь
         return {
             'X': torch.tensor(x, dtype=torch.long), 
             'Y': torch.tensor(y, dtype=torch.long)
         }
 
-# load sequences
+# load meta
 data_dir = os.path.join('data', dataset)
 meta_path = os.path.join(data_dir, 'meta.pkl')
 
@@ -208,7 +206,7 @@ assert os.path.exists(meta_path), f"Meta file not found: {meta_path}"
 with open(meta_path, 'rb') as f:
     meta = pickle.load(f)
 
-# Check type
+# Check type for update meta (for sampler.py)
 if data_type == 'init_seq':
     chars_to_keep = [c for c in meta['itos'].values() if c != '-']
     
@@ -242,11 +240,6 @@ val_loader = DataLoader(
     val_dataset, batch_size=batch_size, shuffle=False,
     num_workers=0, sampler=val_sampler
 )
-
-# =====================
-#   End new block
-# =====================
-
 
 # init these up here, can override if init_from='resume' (i.e. from a checkpoint)
 iter_num = 0

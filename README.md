@@ -1,249 +1,480 @@
-# Запуск
+# BioInf_gpt - GPT для генерации белковых последовательностей
+
+Адаптация nanoGPT для обучения и генерации белковых последовательностей на основе датасета
+
+---
+
+## Оглавление
+- [Описание проекта](#описание-проекта)
+- [Установка](#установка)
+- [Быстрый старт](#быстрый-старт)
+- [Подробности описания](#подробная-инструкция)
+- [Конфигурация](#конфигурация)
+- [Примеры использования](#примеры-использования)
+- [Архитектура](#архитектура)
+
+---
+
+## Описание проекта
+
+Проект реализует GPT-модель для генерации белковых последовательностей
+
+**Основные возможности:**
+- **Два типа последовательностей**: `sequence` (выровненные - с "-") и `init_seq` 
+- **Условная генерация**: добавление префиксов `<class>` и `<type>` с настраиваемой вероятностью
+- **Стриминг данных**: работа с датасетом без полной загрузки
+- **Кастомный вокобуляр**: 20 аминокислот + специальные токены - на классы, типы и обозначения начала, конца последовательности, неизвестный символ, токен для выравнивания данных в батче (class, type, eos, sos, unk, pad)
+
+---
+
+## Установка
+
+### Требования
+- Python 3.8+
+
+### Установка зависимостей
+
+```bash
+pip install torch numpy transformers datasets tiktoken wandb tqdm
+```
+
+**Зависимости:**
+- `torch` - PyTorch для обучения модели
+- `numpy` - работа с массивами
+- `transformers` - загрузка GPT-2 checkpoints
+- `datasets` - Hugging Face Datasets для загрузки датасета
+- `tiktoken` - токенизация (не используется для белков, но была определена для nanoGPT)
+- `wandb` - логирование
+- `tqdm` - прогресс-бары
+
+### Клонирование репозитория
+
+```bash
+git clone https://github.com/HermanDp45/BioInf_gpt.git
+cd BioInf_gpt
+```
+
+---
+
+## Быстрый старт
+
+### Шаг 1: Подготовка метаданных
 
 ```bash
 python data/protein/prepare.py
 ```
 
-```bash
-python train.py config/train_protein.py --out_dir=out-test \
-                --device=cpu \
-                --batch_size=8 \
-                --block_size=64 \
-                --n_layer=2 \
-                --n_head=2 \
-                --n_embd=64 \
-                --max_iters=100 \
-                --eval_interval=10 \
-                --log_interval=10 
-```
+**Что происходит:**
+- Создаётся словарь: 20 аминокислот + специальные токены (на все class, на все type, pad, eos, unk, sos, "-")
+- Сохраняется в `data/protein/meta.pkl`
+
+
+### Шаг 2: Обучение модели
 
 ```bash
-python sample.py --out_dir=out-test --device=cpu  --max_new_tokens=300 --max_protein_length=200
+python train.py config/train_protein.py \
+    --out_dir=out-protein-test \
+    --device=cpu \
+    --compile=False \
+    --batch_size=4 \
+    --block_size=64 \
+    --n_layer=2 \
+    --n_head=2 \
+    --n_embd=64 \
+    --max_iters=100 \
+    --eval_interval=20 \
+    --log_interval=5 \
+    --data_type=init_seq
 ```
 
-# nanoGPT
+**Для GPU (полноценное обучение):**
 
-![nanoGPT](assets/nanogpt.jpg)
-
-The simplest, fastest repository for training/finetuning medium-sized GPTs. It is a rewrite of [minGPT](https://github.com/karpathy/minGPT) that prioritizes teeth over education. Still under active development, but currently the file `train.py` reproduces GPT-2 (124M) on OpenWebText, running on a single 8XA100 40GB node in about 4 days of training. The code itself is plain and readable: `train.py` is a ~300-line boilerplate training loop and `model.py` a ~300-line GPT model definition, which can optionally load the GPT-2 weights from OpenAI. That's it.
-
-![repro124m](assets/gpt2_124M_loss.png)
-
-Because the code is so simple, it is very easy to hack to your needs, train new models from scratch, or finetune pretrained checkpoints (e.g. biggest one currently available as a starting point would be the GPT-2 1.3B model from OpenAI).
-
-## install
-
-```
-pip install torch numpy transformers datasets tiktoken wandb tqdm
-```
-
-Dependencies:
-
-- [pytorch](https://pytorch.org) <3
-- [numpy](https://numpy.org/install/) <3
--  `transformers` for huggingface transformers <3 (to load GPT-2 checkpoints)
--  `datasets` for huggingface datasets <3 (if you want to download + preprocess OpenWebText)
--  `tiktoken` for OpenAI's fast BPE code <3
--  `wandb` for optional logging <3
--  `tqdm` for progress bars <3
-
-## quick start
-
-If you are not a deep learning professional and you just want to feel the magic and get your feet wet, the fastest way to get started is to train a character-level GPT on the works of Shakespeare. First, we download it as a single (1MB) file and turn it from raw text into one large stream of integers:
-
-```sh
-python data/shakespeare_char/prepare.py
+```bash
+python train.py config/train_protein.py \
+    --out_dir=out-protein \
+    --device=cuda \
+    --batch_size=32 \
+    --block_size=155 \
+    --n_layer=6 \
+    --n_head=8 \
+    --n_embd=256 \
+    --max_iters=10000 \
+    --eval_interval=500 \
+    --data_type=init_seq
 ```
 
-This creates a `train.bin` and `val.bin` in that data directory. Now it is time to train your GPT. The size of it very much depends on the computational resources of your system:
+тут используется конфиг + переопределение части его значений, можно использовать только конфиг или только CLI
 
-**I have a GPU**. Great, we can quickly train a baby GPT with the settings provided in the [config/train_shakespeare_char.py](config/train_shakespeare_char.py) config file:
+**Параметры обучения:**
+- `--data_type`: `sequence` (с "-") или `init_seq` (без "-")
+- `--class_prob`: вероятность добавления class токена (0.0-1.0, по умолчанию 0.5)
+- `--type_prob`: вероятность добавления type токена (0.0-1.0, по умолчанию 0.3)
+- `--out_dir`: папка для сохранения чекпоинтов
+- `--device=cuda`: устройство используемое для обучения
+- `--batch_size=32`: размер батча в эпохе
+- `--block_size=155`: размер каждой последовательности в батче
+- `--n_layer=6`: количество слоев
+- `--n_head=8`: колво параллельных голов внимания
+- `-n_embd=256`: размерность эмбелингов
+- `--max_iters=10000`: максимальное колво эпох
+- `--eval_interval=500`: каждые 500 будет оценка лоса на валидационных данных и сохранение чекпоинта
+- `--data_type=init_seq`: определение типа последовательности4
 
-```sh
-python train.py config/train_shakespeare_char.py
-```
+### Шаг 3: Генерация последовательностей
 
-If you peek inside it, you'll see that we're training a GPT with a context size of up to 256 characters, 384 feature channels, and it is a 6-layer Transformer with 6 heads in each layer. On one A100 GPU this training run takes about 3 minutes and the best validation loss is 1.4697. Based on the configuration, the model checkpoints are being written into the `--out_dir` directory `out-shakespeare-char`. So once the training finishes we can sample from the best model by pointing the sampling script at this directory:
+**Базовая генерация (без префиксов):**
 
-```sh
-python sample.py --out_dir=out-shakespeare-char
-```
-
-This generates a few samples, for example:
-
-```
-ANGELO:
-And cowards it be strawn to my bed,
-And thrust the gates of my threats,
-Because he that ale away, and hang'd
-An one with him.
-
-DUKE VINCENTIO:
-I thank your eyes against it.
-
-DUKE VINCENTIO:
-Then will answer him to save the malm:
-And what have you tyrannous shall do this?
-
-DUKE VINCENTIO:
-If you have done evils of all disposition
-To end his power, the day of thrust for a common men
-That I leave, to fight with over-liking
-Hasting in a roseman.
-```
-
-lol  `¯\_(ツ)_/¯`. Not bad for a character-level model after 3 minutes of training on a GPU. Better results are quite likely obtainable by instead finetuning a pretrained GPT-2 model on this dataset (see finetuning section later).
-
-**I only have a macbook** (or other cheap computer). No worries, we can still train a GPT but we want to dial things down a notch. I recommend getting the bleeding edge PyTorch nightly ([select it here](https://pytorch.org/get-started/locally/) when installing) as it is currently quite likely to make your code more efficient. But even without it, a simple train run could look as follows:
-
-```sh
-python train.py config/train_shakespeare_char.py --device=cpu --compile=False --eval_iters=20 --log_interval=1 --block_size=64 --batch_size=12 --n_layer=4 --n_head=4 --n_embd=128 --max_iters=2000 --lr_decay_iters=2000 --dropout=0.0
-```
-
-Here, since we are running on CPU instead of GPU we must set both `--device=cpu` and also turn off PyTorch 2.0 compile with `--compile=False`. Then when we evaluate we get a bit more noisy but faster estimate (`--eval_iters=20`, down from 200), our context size is only 64 characters instead of 256, and the batch size only 12 examples per iteration, not 64. We'll also use a much smaller Transformer (4 layers, 4 heads, 128 embedding size), and decrease the number of iterations to 2000 (and correspondingly usually decay the learning rate to around max_iters with `--lr_decay_iters`). Because our network is so small we also ease down on regularization (`--dropout=0.0`). This still runs in about ~3 minutes, but gets us a loss of only 1.88 and therefore also worse samples, but it's still good fun:
-
-```sh
-python sample.py --out_dir=out-shakespeare-char --device=cpu
-```
-Generates samples like this:
-
-```
-GLEORKEN VINGHARD III:
-Whell's the couse, the came light gacks,
-And the for mought you in Aut fries the not high shee
-bot thou the sought bechive in that to doth groan you,
-No relving thee post mose the wear
-```
-
-Not bad for ~3 minutes on a CPU, for a hint of the right character gestalt. If you're willing to wait longer, feel free to tune the hyperparameters, increase the size of the network, the context length (`--block_size`), the length of training, etc.
-
-Finally, on Apple Silicon Macbooks and with a recent PyTorch version make sure to add `--device=mps` (short for "Metal Performance Shaders"); PyTorch then uses the on-chip GPU that can *significantly* accelerate training (2-3X) and allow you to use larger networks. See [Issue 28](https://github.com/karpathy/nanoGPT/issues/28) for more.
-
-## reproducing GPT-2
-
-A more serious deep learning professional may be more interested in reproducing GPT-2 results. So here we go - we first tokenize the dataset, in this case the [OpenWebText](https://openwebtext2.readthedocs.io/en/latest/), an open reproduction of OpenAI's (private) WebText:
-
-```sh
-python data/openwebtext/prepare.py
-```
-
-This downloads and tokenizes the [OpenWebText](https://huggingface.co/datasets/openwebtext) dataset. It will create a `train.bin` and `val.bin` which holds the GPT2 BPE token ids in one sequence, stored as raw uint16 bytes. Then we're ready to kick off training. To reproduce GPT-2 (124M) you'll want at least an 8X A100 40GB node and run:
-
-```sh
-torchrun --standalone --nproc_per_node=8 train.py config/train_gpt2.py
-```
-
-This will run for about 4 days using PyTorch Distributed Data Parallel (DDP) and go down to loss of ~2.85. Now, a GPT-2 model just evaluated on OWT gets a val loss of about 3.11, but if you finetune it it will come down to ~2.85 territory (due to an apparent domain gap), making the two models ~match.
-
-If you're in a cluster environment and you are blessed with multiple GPU nodes you can make GPU go brrrr e.g. across 2 nodes like:
-
-```sh
-# Run on the first (master) node with example IP 123.456.123.456:
-torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr=123.456.123.456 --master_port=1234 train.py
-# Run on the worker node:
-torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py
-```
-
-It is a good idea to benchmark your interconnect (e.g. iperf3). In particular, if you don't have Infiniband then also prepend `NCCL_IB_DISABLE=1` to the above launches. Your multinode training will work, but most likely _crawl_. By default checkpoints are periodically written to the `--out_dir`. We can sample from the model by simply `python sample.py`.
-
-Finally, to train on a single GPU simply run the `python train.py` script. Have a look at all of its args, the script tries to be very readable, hackable and transparent. You'll most likely want to tune a number of those variables depending on your needs.
-
-## baselines
-
-OpenAI GPT-2 checkpoints allow us to get some baselines in place for openwebtext. We can get the numbers as follows:
-
-```sh
-$ python train.py config/eval_gpt2.py
-$ python train.py config/eval_gpt2_medium.py
-$ python train.py config/eval_gpt2_large.py
-$ python train.py config/eval_gpt2_xl.py
-```
-
-and observe the following losses on train and val:
-
-| model | params | train loss | val loss |
-| ------| ------ | ---------- | -------- |
-| gpt2 | 124M         | 3.11  | 3.12     |
-| gpt2-medium | 350M  | 2.85  | 2.84     |
-| gpt2-large | 774M   | 2.66  | 2.67     |
-| gpt2-xl | 1558M     | 2.56  | 2.54     |
-
-However, we have to note that GPT-2 was trained on (closed, never released) WebText, while OpenWebText is just a best-effort open reproduction of this dataset. This means there is a dataset domain gap. Indeed, taking the GPT-2 (124M) checkpoint and finetuning on OWT directly for a while reaches loss down to ~2.85. This then becomes the more appropriate baseline w.r.t. reproduction.
-
-## finetuning
-
-Finetuning is no different than training, we just make sure to initialize from a pretrained model and train with a smaller learning rate. For an example of how to finetune a GPT on new text go to `data/shakespeare` and run `prepare.py` to download the tiny shakespeare dataset and render it into a `train.bin` and `val.bin`, using the OpenAI BPE tokenizer from GPT-2. Unlike OpenWebText this will run in seconds. Finetuning can take very little time, e.g. on a single GPU just a few minutes. Run an example finetuning like:
-
-```sh
-python train.py config/finetune_shakespeare.py
-```
-
-This will load the config parameter overrides in `config/finetune_shakespeare.py` (I didn't tune them much though). Basically, we initialize from a GPT2 checkpoint with `init_from` and train as normal, except shorter and with a small learning rate. If you're running out of memory try decreasing the model size (they are `{'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}`) or possibly decreasing the `block_size` (context length). The best checkpoint (lowest validation loss) will be in the `out_dir` directory, e.g. in `out-shakespeare` by default, per the config file. You can then run the code in `sample.py --out_dir=out-shakespeare`:
-
-```
-THEODORE:
-Thou shalt sell me to the highest bidder: if I die,
-I sell thee to the first; if I go mad,
-I sell thee to the second; if I
-lie, I sell thee to the third; if I slay,
-I sell thee to the fourth: so buy or sell,
-I tell thee again, thou shalt not sell my
-possession.
-
-JULIET:
-And if thou steal, thou shalt not sell thyself.
-
-THEODORE:
-I do not steal; I sell the stolen goods.
-
-THEODORE:
-Thou know'st not what thou sell'st; thou, a woman,
-Thou art ever a victim, a thing of no worth:
-Thou hast no right, no right, but to be sold.
-```
-
-Whoa there, GPT, entering some dark place over there. I didn't really tune the hyperparameters in the config too much, feel free to try!
-
-## sampling / inference
-
-Use the script `sample.py` to sample either from pre-trained GPT-2 models released by OpenAI, or from a model you trained yourself. For example, here is a way to sample from the largest available `gpt2-xl` model:
-
-```sh
+```bash
 python sample.py \
-    --init_from=gpt2-xl \
-    --start="What is the answer to life, the universe, and everything?" \
-    --num_samples=5 --max_new_tokens=100
+    --out_dir=out-protein-test \
+    --device=cpu \
+    --num_samples=5 \
+    --max_new_tokens=200 \
+    --max_protein_length=150 \
+    --temperature=0.8
 ```
 
-If you'd like to sample from a model you trained, use the `--out_dir` to point the code appropriately. You can also prompt the model with some text from a file, e.g. ```python sample.py --start=FILE:prompt.txt```.
+**С class и type и start:**
 
-## efficiency notes
+```bash
+python sample.py \
+    --out_dir=out-protein-test \
+    --device=cpu \
+    --class_label="human" \
+    --type_label="Heavy" \
+    --num_samples=5 \
+    --max_new_tokens=200 \
+    --max_protein_length=200 \
+    --start="QV"
+```
 
-For simple model benchmarking and profiling, `bench.py` might be useful. It's identical to what happens in the meat of the training loop of `train.py`, but omits much of the other complexities.
+**Доступные параметры генерации:**
+- `--class_label`: класс последовательности (например, "human", "mouse_C57BL_6", "rabbit")
+- `--type_label`: тип цепи ("Heavy" или "Light")
+- `--start`: часть последовательности на старте (строка аминокислот)
+- `--temperature`: температура сэмплирования 
+- `--top_k`: top-k фильтрация
+- `--max_protein_length`: максимальная длина генерируемой последовательности
 
-Note that the code by default uses [PyTorch 2.0](https://pytorch.org/get-started/pytorch-2.0/). At the time of writing (Dec 29, 2022) this makes `torch.compile()` available in the nightly release. The improvement from the one line of code is noticeable, e.g. cutting down iteration time from ~250ms / iter to 135ms / iter. Nice work PyTorch team!
+---
 
-## todos
+## Подробости описания
 
-- Investigate and add FSDP instead of DDP
-- Eval zero-shot perplexities on standard evals (e.g. LAMBADA? HELM? etc.)
-- Finetune the finetuning script, I think the hyperparams are not great
-- Schedule for linear batch size increase during training
-- Incorporate other embeddings (rotary, alibi)
-- Separate out the optim buffers from model params in checkpoints I think
-- Additional logging around network health (e.g. gradient clip events, magnitudes)
-- Few more investigations around better init etc.
+### 1. Подготовка данных (`prepare.py`)
 
-## troubleshooting
+data/protein/prepare.py создаёт только meta.pkl
+Включает:
+ - Словарь (stoi, itos)
+ - vocab_size
+ - Информацию о классах и типах
+ - Размер датасета
 
-Note that by default this repo uses PyTorch 2.0 (i.e. `torch.compile`). This is fairly new and experimental, and not yet available on all platforms (e.g. Windows). If you're running into related error messages try to disable this by adding `--compile=False` flag. This will slow down the code but at least it will run.
 
-For some context on this repository, GPT, and language modeling it might be helpful to watch my [Zero To Hero series](https://karpathy.ai/zero-to-hero.html). Specifically, the [GPT video](https://www.youtube.com/watch?v=kCc8FmEb1nY) is popular if you have some prior language modeling context.
+**Важные классы и типы:**
 
-For more questions/discussions feel free to stop by **#nanoGPT** on Discord:
+**17 классов последовательностей:**
+- `Camel`, `HIS_mouse`, `human`, `mouse_BALB_c`, `mouse_Balb_c`, `mouse_C57BL_6`, `mouse_C57BL_6J`, `mouse_Igh_wt`, `mouse_Ighe_e`, `mouse_Ighg_g`, `mouse_RAG2_GFP_129Sve`, `mouse_Swiss_Webster`, `mouse_outbred`,`mouse_outbred_C57BL_6`, `rabbit`, `rat`, `rhesus`
 
-[![](https://dcbadge.vercel.app/api/server/3zy8kqD9Cp?compact=true&style=flat)](https://discord.gg/3zy8kqD9Cp)
+**2 типа цепей:**
+- `Heavy`
+- `Light`
 
-## acknowledgements
+**Vocabulary:**
+- 20 аминокислот: `ARNDCQEGHILKMFPSTWYV`
+- Базовые токены: `<pad>`, `<eos>`, `<unk>`, `<sos>`
+- Class токены: `<cls_human>`, `<cls_mouse_C57BL_6>`, и т.д.
+- Type токены: `<type_Heavy>`, `<type_Light>`
+- Gap символ: `-` (только для `sequence`, удаляется для `init_seq`)
 
-All nanoGPT experiments are powered by GPUs on [Lambda labs](https://lambdalabs.com), my favorite Cloud GPU provider. Thank you Lambda labs for sponsoring nanoGPT!
+**Итоговый vocab_size:** 43 токена
+**После очистки для init_seq:** 42 токена (без "-")
+
+### 2. Обучение модели (`train.py`)
+
+**Архитектура:**
+```python
+class FlexibleProteinDataset(IterableDataset):
+    # Streaming загрузка с Hugging Face Datasets
+    # Динамическое добавление префиксов с заданной вероятностью
+```
+
+**Процесс обучения:**
+
+1. **Загрузка meta.pkl:**
+   ```python
+   # Автоматическая очистка словаря для init_seq
+   if data_type == 'init_seq':
+       # Удаляется "-" из stoi/itos
+       # Пересохраняется meta.pkl
+   ```
+
+2. **Создание датасета:**
+   ```python
+   # Streaming загрузка OAS95-aligned-cleaned
+   train_dataset = FlexibleProteinDataset(
+       split_name="train", 
+       config=config, 
+       meta=meta
+   )
+   ```
+
+3. **Обработка примера:**
+
+Для каждой последовательности:
+
+1. Выбор data_type (sequence или init_seq)
+2. Добавление класс токена (с вероятностью class_prob)
+3. Добавление type токена (с вероятностью type_prob)
+4. Формат: <sos> [<cls_X>] [<type_Y>] AMINO_ACIDS <eos>
+5. Padding до block_size
+
+4. Training loop:
+   ```python
+   # Standard GPT training:
+   # - AdamW optimizer
+   # - Cosine learning rate schedule
+   # - Gradient accumulation
+   # - Checkpointing best model
+   ```
+
+**Ключевые параметры модели:**
+- `block_size`: длина контекста (155 для полных последовательностей)
+- `n_layer`: количество Transformer слоёв (6 для среднего размера)
+- `n_head`: количество attention heads (8)
+- `n_embd`: размер embeddings (256)
+- `dropout`: dropout rate (0.2 для регуляризации)
+
+### 3. Генерация (`sample.py`)
+
+**Процесс генерации:**
+
+1. **Загрузка модели:**
+
+* Загрузка checkpoint из out_dir
+* Загрузка meta.pkl для decode
+
+
+2. **Формирование префикса:**
+
+* start_tokens = [<sos>]
+* if class_label: добавить <cls_X>
+* if type_label: добавить <type_Y>
+* Закодировать начало - добавить частичную последовательность
+
+3. **Генерация:**
+
+* model.generate() - autoregressive sampling
+* temperature для контроля разнообразия
+* top_k для фильтрации маловероятных токенов
+
+4. **Постобработка:**
+
+* Обрезка по <eos>
+* Удаление всех спецтоксенов после префикса
+* Оставить только аминокислоты (и "-" для sequence)
+* Обрезка до max_protein_length
+
+**Примеры затравок:**
+
+```bash
+# Пустая затравка (модель сама решает всё)
+python sample.py --out_dir=out-protein --start=""
+
+# Только class
+python sample.py --out_dir=out-protein --class_label="human"
+
+# Только type
+python sample.py --out_dir=out-protein --type_label="Heavy"
+
+# Class + type
+python sample.py --out_dir=out-protein --class_label="mouse_C57BL_6" --type_label="Light"
+
+# С начальной последовательностью
+python sample.py --out_dir=out-protein --start="EVQLV" --class_label="human"
+```
+
+---
+
+## Конфигурация
+
+### Файл конфигурации (`config/train_protein.py`)
+
+```python
+out_dir = 'out-protein'
+eval_interval = 50        # Каждые N итераций - оценка на validation
+log_interval = 10         # Каждые N итераций - вывод логов
+max_iters = 1000          # Общее количество итераций
+
+# Dataset
+dataset = 'protein'
+
+# Model size
+batch_size = 32           # Размер батча
+block_size = 155          # Длина контекста (максимальная длина последовательности)
+
+n_layer = 6               # Количество Transformer слоёв
+n_head = 8                # Количество attention heads
+n_embd = 256              # Размерность embeddings
+dropout = 0.2             # Dropout rate
+
+# Training
+learning_rate = 6e-4      # Learning rate
+device = 'cpu'            # 'cpu', 'cuda', 'mps' (для Apple Silicon)
+compile = False           # PyTorch 2.0 compile (True для GPU)
+
+# Protein-specific
+class_prob = 0.5          # Вероятность добавления class токена [0.0-1.0]
+type_prob = 0.3           # Вероятность добавления type токена [0.0-1.0]
+data_type = 'init_seq'    # 'sequence' (с "-") или 'init_seq' (без "-")
+```
+
+## Примеры использования
+
+### Пример 1: Быстрый тест на CPU
+
+```bash
+# 1. Создание meta.pkl
+python data/protein/prepare.py
+
+# 2. Обучение маленькой модели (2-3 минуты)
+python train.py config/train_protein.py \
+    --out_dir=out-quick-test \
+    --device=cpu \
+    --compile=False \
+    --batch_size=2 \
+    --block_size=64 \
+    --n_layer=2 \
+    --n_head=2 \
+    --n_embd=32 \
+    --max_iters=50 \
+    --eval_interval=10 \
+    --data_type=init_seq
+
+# 3. Генерация
+python sample.py \
+    --out_dir=out-quick-test \
+    --device=cpu \
+    --num_samples=3 \
+    --max_protein_length=50 \
+    --class_label="human" \
+    --type_label="Heavy"
+```
+
+### Пример 2: Обучение на GPU
+
+```bash
+# В Kaggle Notebook или Google Colab
+!git clone https://github.com/HermanDp45/BioInf_gpt.git
+%cd BioInf_gpt
+!pip install torch datasets transformers tqdm
+
+# Подготовка
+!python data/protein/prepare.py
+
+# Обучение (настройте под доступную память)
+!python train.py config/train_protein.py \
+    --out_dir=out-protein-gpu \
+    --device=cuda \
+    --batch_size=16 \
+    --block_size=128 \
+    --n_layer=4 \
+    --n_head=4 \
+    --n_embd=128 \
+    --max_iters=2000 \
+    --eval_interval=100 \
+    --data_type=init_seq
+
+# Генерация
+!python sample.py \
+    --out_dir=out-protein-gpu \
+    --device=cuda \
+    --num_samples=10 \
+    --class_label="human" \
+    --type_label="Heavy"
+```
+
+### Пример 3: Сравнение sequence vs init_seq
+
+```bash
+# Обучение на sequence (с "-")
+python train.py config/train_protein.py \
+    --out_dir=out-sequence \
+    --data_type=sequence \
+    --max_iters=500
+
+# Обучение на init_seq (без "-")
+python train.py config/train_protein.py \
+    --out_dir=out-init-seq \
+    --data_type=init_seq \
+    --max_iters=500
+
+# Генерация из обеих моделей
+python sample.py --out_dir=out-sequence --num_samples=5
+python sample.py --out_dir=out-init-seq --num_samples=5
+```
+
+### Пример 4: Эксперименты с вероятностями префиксов
+
+```bash
+# Без префиксов (unconditional generation)
+python train.py config/train_protein.py \
+    --out_dir=out-no-prefix \
+    --class_prob=0.0 \
+    --type_prob=0.0 \
+    --max_iters=500
+
+# Всегда с префиксами (conditional generation)
+python train.py config/train_protein.py \
+    --out_dir=out-full-prefix \
+    --class_prob=1.0 \
+    --type_prob=1.0 \
+    --max_iters=500
+
+# Смешанный режим (по умолчанию)
+python train.py config/train_protein.py \
+    --out_dir=out-mixed-prefix \
+    --class_prob=0.5 \
+    --type_prob=0.3 \
+    --max_iters=500
+```
+
+---
+
+## Архитектура
+
+### Структура проекта
+
+```
+BioInf_gpt/
+├── data/
+│   └── protein/
+│       ├── prepare.py          # Создание meta.pkl
+│       └── meta.pkl            # Словарь и метаданные
+├── config/
+│   └── train_protein.py        # Конфигурация обучения
+├── model.py                    # GPT архитектура
+├── train.py                    # Training loop
+├── sample.py                   # Генерация
+├── configurator.py             # Парсинг аргументов
+└── README_PROTEIN.md           # Эта документация
+```
+---
+
+
+## Дальнейшие улучшения
+
+### Предложения по развитию проекта:
+1. **Оценка качества:**
+   - Добавить метрики: perplexity, BLOSUM similarity с реальными последовательностями
+   - Проверка на валидность структуры (с помощью AlphaFold)
+
+2. **Архитектура:**
+   - Попробовать диффузионную модель
+   - Экспериментировать с размером модели
+
+3. **Данные:**
+   - Фильтрация последовательностей по качеству
+   - Балансировка классов
+   - Аугментация (например random masking)
+
+---

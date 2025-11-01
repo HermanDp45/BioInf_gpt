@@ -1,7 +1,7 @@
 import os
 import pickle
 
-# --- 1. Classes and types from dataset ---
+# Classes and types from dataset
 
 # 17 classes
 FULL_CLEANED_CLASSES = [
@@ -19,7 +19,7 @@ FULL_CLEANED_TYPES = [
 unique_classes = set(FULL_CLEANED_CLASSES)
 unique_types = set(FULL_CLEANED_TYPES)
 
-# --- 2. Create Vocab ---
+# Create Vocab
 
 # dictionary of all tokens
 amino_acids = "ARNDCQEGHILKMFPSTWYV"
@@ -36,7 +36,7 @@ vocab_size = len(chars)
 
 print(f"Vocab size (full, including '-'): {vocab_size}")
 
-# --- 3. Removed Processing ---
+# Removed Processing
 
 if __name__ == '__main__':
     
@@ -59,4 +59,4 @@ if __name__ == '__main__':
     with open(meta_path, 'wb') as f:
         pickle.dump(meta, f)
 
-    print(f"\nReady. Generated only {meta_path} (full dataset size assumed).")
+    print(f"\nReady. Generated {meta_path}.")
