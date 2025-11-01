@@ -91,7 +91,7 @@ python train.py config/train_protein.py \
 
 ```bash
 python train.py config/train_protein.py \
-    --out_dir=out-protein \
+    --out_dir=out-protein-test \
     --device=cuda \
     --batch_size=32 \
     --block_size=155 \
