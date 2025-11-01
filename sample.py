@@ -5,7 +5,6 @@ import os
 import pickle
 from contextlib import nullcontext
 import torch
-import tiktoken
 from model import GPTConfig, GPT
 
 # -----------------------------------------------------------------------------
@@ -20,8 +19,8 @@ seed = 1337
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32' or 'bfloat16' or 'float16'
 compile = False # use PyTorch 2.0 to compile the model to be faster
-class_label = None
-type_label = None
+class_label = ""
+type_label = ""
 max_protein_length=155
 exec(open('configurator.py').read()) # overrides from command line or config file
 # -----------------------------------------------------------------------------
@@ -72,12 +71,6 @@ if load_meta:
     # Используем правильную encode функцию для посимвольного кодирования
     encode = lambda s: [stoi.get(c, stoi['<unk>']) for c in s]
     decode = lambda l: ''.join([itos[i] for i in l])
-else:
-    # ok let's assume gpt-2 encodings by default
-    print("No meta.pkl found, assuming GPT-2 encodings...")
-    enc = tiktoken.get_encoding("gpt2")
-    encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
-    decode = lambda l: enc.decode(l)
 
 # encode the beginning of the prompt
 if start.startswith('FILE:'):
@@ -95,7 +88,7 @@ if load_meta and stoi is not None:  # Only add special tokens if we have the cus
         print("Warning: <sos> token not found in vocabulary")
     
     # Add class token if specified
-    if class_label is not None:
+    if class_label != "":
         class_token = f"<cls_{class_label.replace('/', '_').replace(' ', '').replace('-', '_')}>"
         if class_token in stoi:
             start_tokens.append(stoi[class_token])
@@ -104,7 +97,7 @@ if load_meta and stoi is not None:  # Only add special tokens if we have the cus
             print(f"Warning: Class token '{class_token}' not in vocabulary")
     
     # Add type token if specified
-    if type_label is not None:
+    if type_label != "":
         type_token = f"<type_{type_label}>"
         if type_token in stoi:
             start_tokens.append(stoi[type_token])
